@@ -177,7 +177,15 @@ std::string BranchInst::toIR() const {
 GetElementPtrInst::GetElementPtrInst(const TypePtr &elementType, Value *pointer,
                                      std::vector<Value *> indices)
     : Instruction(Type::getPointer(elementType), InstructionKind::GEP, true),
-      elementType_(elementType), pointer_(pointer), indices_(std::move(indices)) {}
+      elementType_(elementType), pointer_(pointer), indices_(std::move(indices)) {
+  TypePtr currentType = elementType;
+  for (size_t i = 1; i < indices_.size(); ++i) {
+    if (currentType->isArray()) {
+      currentType = std::static_pointer_cast<ArrayType>(currentType)->getElementType();
+    }
+  }
+  type_ = Type::getPointer(currentType);
+}
 
 std::string GetElementPtrInst::toIR() const {
   std::ostringstream oss;

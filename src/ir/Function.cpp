@@ -31,9 +31,11 @@ const std::vector<std::unique_ptr<Argument>> &Function::getArguments() const {
 }
 
 BasicBlock *Function::createBasicBlock(const std::string &label) {
-  std::string finalLabel = label.empty() ? nextBlockLabel("bb") : label;
-  auto block =
-      std::make_unique<BasicBlock>(this, finalLabel);
+  // Always make block labels unique to avoid IR with duplicate labels when
+  // nested control-flow constructs reuse the same textual hint (e.g. "if.then").
+  std::string hint = label.empty() ? "bb" : label;
+  std::string finalLabel = hint + std::to_string(blockId_++);
+  auto block = std::make_unique<BasicBlock>(this, finalLabel);
   BasicBlock *raw = block.get();
   blocks_.push_back(std::move(block));
   return raw;

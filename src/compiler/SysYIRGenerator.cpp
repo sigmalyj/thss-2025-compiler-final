@@ -783,121 +783,39 @@ std::shared_ptr<ir::Constant> SysYIRGenerator::buildArrayConstant(const ir::Type
 }
 
 void SysYIRGenerator::emitArrayInitializer(ir::Value *basePtr, const std::vector<int> &dims, SysYParser::InitValContext *ctx) {
-  // This is complex for runtime initialization.
-  // We need to flatten the InitValContext and map to linear indices.
-  // Or recursively traverse.
-  
-  // Simplified: flatten first (evaluating Exps), then store.
-  // But Exps are runtime values.
-  
-  // Recursive approach:
-  // current ptr, current dims.
-  // If ctx has exp, store it.
-  // If ctx has list, iterate.
-  
-  // Actually, let's just implement a simple version that assumes full initialization or zero init.
-  // But SysY allows partial init: int a[2][2] = {{1}, {2,3}}; -> 1, 0, 2, 3.
-  
-  // We can use a cursor and fill.
-  // But we need to handle the structure.
-  
-  // Let's just zero-init the whole array first using memset (or loop), then store explicit values?
-  // LLVM memset intrinsic?
-  // Or just generate stores for everything.
-  
-  // Let's traverse and track linear index.
-  std::vector<ir::Value *> values;
-  // Helper to flatten runtime init
-  std::function<void(SysYParser::InitValContext*)> flatten = [&](SysYParser::InitValContext *node) {
-    if (node->exp()) {
-      values.push_back(ensureInteger(evaluateExp(node->exp())));
-    } else {
-      for (auto *child : node->initVal()) {
-        flatten(child);
-      }
-    }
-  };
-  
-  // Wait, structure matters for padding.
-  // {{1}, 2} for int a[2][2] -> {{1, 0}, {2, 0}}
-  // {1, 2} for int a[2][2] -> {{1, 2}, {0, 0}}
-  
-  // This is hard to do correctly without tracking current dimension.
-  // Given the time, I'll implement a simplified version that assumes the structure matches or is flat.
-  // Correct implementation requires tracking current depth and filling zeros.
-  
-  // For now, let's just assume the user provides correct structure or flat list.
-  // We will fill linearly.
-  
-  // Better: Zero out the array first.
-  // Then store values.
-  // How to zero out?
-  // Iterate all elements and store 0.
   size_t total = totalSize(dims);
   for (size_t i = 0; i < total; ++i) {
     storeLinearElement(basePtr, dims, i, builder_.getInt32(0).get());
   }
-  
-  // Now traverse and store.
-  // We need a recursive function that takes (node, current_dim_index, current_offset).
   
   std::function<void(SysYParser::InitValContext*, size_t, size_t&)> traverse = 
     [&](SysYParser::InitValContext *node, size_t dimIndex, size_t &cursor) {
       if (node->exp()) {
         storeLinearElement(basePtr, dims, cursor++, ensureInteger(evaluateExp(node->exp())));
       } else {
-        // It's a brace list.
-        // If we are at a dimension, we enter it.
-        // We need to know how many elements this brace covers.
-        // It covers dims[dimIndex] elements of type dims[dimIndex+1]...
-        
-        size_t startCursor = cursor;
         size_t subSize = 1;
         for (size_t k = dimIndex + 1; k < dims.size(); ++k) subSize *= dims[k];
-        
-        // If we are at the last dim (int array), subSize is 1.
         
         size_t childDimIndex = dimIndex + 1;
         
         for (auto *child : node->initVal()) {
            if (child->exp()) {
-             // It's a value.
-             // If we are expecting a list (dimIndex < dims.size()), this consumes one element of the current dim.
-             // But wait, {1, 2} for int a[2][2].
-             // At top level (dim 0), we see 1. 1 is int.
-             // It fills a[0][0].
-             // Then 2 fills a[0][1].
-             // So we just increment cursor.
              storeLinearElement(basePtr, dims, cursor++, ensureInteger(evaluateExp(child->exp())));
            } else {
-             // It's a list. It must align with a sub-dimension.
-             // We recurse.
+             size_t currentPosInElem = cursor % subSize;
+             if (currentPosInElem != 0) {
+                 cursor += (subSize - currentPosInElem);
+             }
+             
+             size_t startCursor = cursor;
              traverse(child, childDimIndex, cursor);
+             
+             size_t endCursor = startCursor + subSize;
+             if (cursor < endCursor) {
+                 cursor = endCursor;
+             }
            }
         }
-        
-        // Pad the rest of this dimension with zeros?
-        // We already zeroed everything.
-        // We just need to advance cursor to the end of this block if we didn't fill it?
-        // Yes.
-        // The brace covers one element of dims[dimIndex].
-        // Size of one element of dims[dimIndex] is subSize.
-        // Wait, no.
-        // int a[2][2] = {{1}, {2}};
-        // Outer brace covers whole array.
-        // Inner {1} covers a[0] (size 2).
-        // We filled 1. Cursor advanced by 1.
-        // We need to advance cursor to start + 2.
-        
-        // But wait, traverse is called for the outer brace first?
-        // No, emitArrayInitializer calls traverse on ctx.
-        // ctx is the top level InitVal.
-        
-        // If ctx has exp, it's scalar init? int a = 1;
-        // If ctx has list, it's array init.
-        
-        // Let's refine.
-        // If dimIndex == dims.size(), we are at scalar level.
       }
   };
   
