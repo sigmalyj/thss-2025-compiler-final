@@ -191,7 +191,8 @@ GetElementPtrInst::GetElementPtrInst(const TypePtr &elementType, Value *pointer,
 std::string GetElementPtrInst::toIR() const {
   std::ostringstream oss;
   oss << asOperand() << " = getelementptr inbounds "
-      << elementType_->str() << ", ptr " << pointer_->asOperand();
+      << elementType_->str() << ", " << pointer_->getType()->str()
+      << ' ' << pointer_->asOperand();  
   for (Value *idx : indices_) {
     oss << ", i32 " << idx->asOperand();
   }

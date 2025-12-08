@@ -59,8 +59,9 @@ std::string VoidType::str() const { return "void"; }
 PointerType::PointerType(TypePtr elementType)
     : Type(Kind::Pointer), elementType_(std::move(elementType)) {}
 
-std::string PointerType::str() const { return "ptr"; }
-
+std::string PointerType::str() const {
+  return elementType_->str() + "*";
+}
 ArrayType::ArrayType(TypePtr elementType, std::size_t elementCount)
     : Type(Kind::Array), elementType_(std::move(elementType)),
       elementCount_(elementCount) {}
