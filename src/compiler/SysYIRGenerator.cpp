@@ -173,9 +173,10 @@ void SysYIRGenerator::handleConstDef(SysYParser::ConstDefContext *ctx) {
 
   ConstValueList values;
   if (ctx->constInitVal()) {
-    values = flattenConstInit(ctx->constInitVal());
+    values = materializeConstInit(ctx->constInitVal(), dims);
+  } else {
+    values.assign(total, 0);
   }
-  normalizeInitializer(values, total);
 
   Symbol symbol;
   symbol.valueType = ir::Type::getInt32();
@@ -233,19 +234,7 @@ void SysYIRGenerator::handleVarDef(SysYParser::VarDefContext *ctx) {
     ir::TypePtr valueType = dims.empty() ? ir::Type::getInt32() : buildArrayType(dims);
     std::shared_ptr<ir::Constant> initializer;
     if (ctx->initVal()) {
-      ConstValueList values;
-      auto flatten = [&](auto &&self, SysYParser::InitValContext *node) -> void {
-        if (node->exp()) {
-          values.push_back(evalAddExp(node->exp()->addExp()));
-        } else {
-          for (auto *child : node->initVal()) {
-            self(self, child);
-          }
-        }
-      };
-      // Placeholder: global variable init requires constant expressions
-      flatten(flatten, ctx->initVal());
-      normalizeInitializer(values, total);
+      ConstValueList values = materializeInit(ctx->initVal(), dims);
       std::size_t cursor = 0;
       initializer = dims.empty() ? ir::ConstantInt::get(values[0])
                                  : buildArrayConstant(valueType, values, cursor);
@@ -609,13 +598,9 @@ ir::Value *SysYIRGenerator::getLValAddress(SysYParser::LValContext *ctx) {
     throw std::runtime_error("undefined variable: " + name);
   }
   
-  ir::Value *currentPtr = symbol->address;
-  auto ptrType = std::dynamic_pointer_cast<ir::PointerType>(currentPtr->getType());
-  auto elemType = ptrType->getElementType();
-
-  if (symbol->isPointerParam) {
-     currentPtr = builder_.createLoad(elemType, currentPtr);
-  }
+    ir::Value *currentPtr = symbol->address;
+    auto ptrType = std::dynamic_pointer_cast<ir::PointerType>(currentPtr->getType());
+    auto elemType = ptrType->getElementType();
   
   std::vector<ir::Value *> indices;
   for (auto *exp : ctx->exp()) {
@@ -623,25 +608,42 @@ ir::Value *SysYIRGenerator::getLValAddress(SysYParser::LValContext *ctx) {
   }
 
   if (symbol->isPointerParam) {
-     if (indices.empty()) return currentPtr;
-     std::vector<ir::Value *> args;
-     args.push_back(indices[0]);
-     for (size_t i = 1; i < indices.size(); ++i) args.push_back(indices[i]);
-     
-     auto ptrElemType = std::dynamic_pointer_cast<ir::PointerType>(currentPtr->getType())->getElementType();
-     return builder_.createGEP(ptrElemType, currentPtr, args);
+    if (indices.empty()) return currentPtr; // already a pointer to element type
+    std::vector<ir::Value *> args;
+    for (auto *idx : indices) args.push_back(idx);
+    auto ptrElemType = std::dynamic_pointer_cast<ir::PointerType>(currentPtr->getType())->getElementType();
+    return builder_.createGEP(ptrElemType, currentPtr, args);
   } else {
-     if (indices.empty()) return currentPtr;
-     std::vector<ir::Value *> args;
-     args.push_back(builder_.getInt32(0).get());
-     for (auto *idx : indices) args.push_back(idx);
-     
-     auto ptrElemType = std::dynamic_pointer_cast<ir::PointerType>(currentPtr->getType())->getElementType();
-     return builder_.createGEP(ptrElemType, currentPtr, args);
+    if (indices.empty()) return currentPtr;
+    std::vector<ir::Value *> args;
+    args.push_back(builder_.getInt32(0).get());
+    for (auto *idx : indices) args.push_back(idx);
+    auto ptrElemType = std::dynamic_pointer_cast<ir::PointerType>(currentPtr->getType())->getElementType();
+    return builder_.createGEP(ptrElemType, currentPtr, args);
   }
 }
 
 ir::Value *SysYIRGenerator::evaluateForArgument(SysYParser::ExpContext *ctx, ir::TypePtr expectedType) {
+  // Support array-to-pointer decay when the callee expects a pointer type.
+  if (expectedType && expectedType->isPointer()) {
+    if (auto *lvalCtx = tryExtractLVal(ctx)) {
+      auto *addr = getLValAddress(lvalCtx);
+      auto addrType = std::dynamic_pointer_cast<ir::PointerType>(addr->getType());
+      auto elemType = addrType->getElementType();
+
+      // If we have an array lvalue and the callee expects a pointer, decay to
+      // the first element pointer (GEP 0,0,...)
+      if (elemType->isArray()) {
+        std::vector<ir::Value *> decayIdx = {builder_.getInt32(0).get(), builder_.getInt32(0).get()};
+        return builder_.createGEP(elemType, addr, decayIdx);
+      }
+
+      // If the lvalue already matches (pointer parameter), just use the
+      // computed address.
+      return addr;
+    }
+  }
+
   return evaluateExp(ctx);
 }
 
@@ -760,6 +762,108 @@ SysYIRGenerator::ConstValueList SysYIRGenerator::flattenConstInit(SysYParser::Co
     }
   }
   return list;
+}
+
+SysYIRGenerator::ConstValueList
+SysYIRGenerator::materializeConstInit(SysYParser::ConstInitValContext *ctx,
+                                      const std::vector<int> &dims) {
+  std::size_t total = totalSize(dims);
+  ConstValueList values(total, 0);
+  if (!ctx) {
+    return values;
+  }
+
+  std::function<void(SysYParser::ConstInitValContext *, std::size_t, std::size_t &)> traverse =
+      [&](SysYParser::ConstInitValContext *node, std::size_t dimIndex, std::size_t &cursor) {
+        if (node->constExp()) {
+          if (cursor < values.size()) {
+            values[cursor++] = evalConstExp(node->constExp());
+          }
+          return;
+        }
+
+        std::size_t subSize = 1;
+        for (std::size_t k = dimIndex + 1; k < dims.size(); ++k) {
+          subSize *= static_cast<std::size_t>(dims[k]);
+        }
+
+        std::size_t childDimIndex = dimIndex + 1;
+        for (auto *child : node->constInitVal()) {
+          if (child->constExp()) {
+            if (cursor < values.size()) {
+              values[cursor++] = evalConstExp(child->constExp());
+            }
+          } else {
+            std::size_t currentPos = subSize ? (cursor % subSize) : 0;
+            if (currentPos != 0) {
+              cursor += (subSize - currentPos);
+            }
+
+            std::size_t startCursor = cursor;
+            traverse(child, childDimIndex, cursor);
+
+            std::size_t endCursor = startCursor + subSize;
+            if (cursor < endCursor) {
+              cursor = endCursor;
+            }
+          }
+        }
+      };
+
+  std::size_t cursor = 0;
+  traverse(ctx, 0, cursor);
+  return values;
+}
+
+SysYIRGenerator::ConstValueList
+SysYIRGenerator::materializeInit(SysYParser::InitValContext *ctx,
+                                 const std::vector<int> &dims) {
+  std::size_t total = totalSize(dims);
+  ConstValueList values(total, 0);
+  if (!ctx) {
+    return values;
+  }
+
+  std::function<void(SysYParser::InitValContext *, std::size_t, std::size_t &)> traverse =
+      [&](SysYParser::InitValContext *node, std::size_t dimIndex, std::size_t &cursor) {
+        if (node->exp()) {
+          if (cursor < values.size()) {
+            values[cursor++] = evalAddExp(node->exp()->addExp());
+          }
+          return;
+        }
+
+        std::size_t subSize = 1;
+        for (std::size_t k = dimIndex + 1; k < dims.size(); ++k) {
+          subSize *= static_cast<std::size_t>(dims[k]);
+        }
+
+        std::size_t childDimIndex = dimIndex + 1;
+        for (auto *child : node->initVal()) {
+          if (child->exp()) {
+            if (cursor < values.size()) {
+              values[cursor++] = evalAddExp(child->exp()->addExp());
+            }
+          } else {
+            std::size_t currentPos = subSize ? (cursor % subSize) : 0;
+            if (currentPos != 0) {
+              cursor += (subSize - currentPos);
+            }
+
+            std::size_t startCursor = cursor;
+            traverse(child, childDimIndex, cursor);
+
+            std::size_t endCursor = startCursor + subSize;
+            if (cursor < endCursor) {
+              cursor = endCursor;
+            }
+          }
+        }
+      };
+
+  std::size_t cursor = 0;
+  traverse(ctx, 0, cursor);
+  return values;
 }
 
 void SysYIRGenerator::normalizeInitializer(ConstValueList &values, std::size_t total) {

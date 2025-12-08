@@ -94,7 +94,12 @@ std::string Function::print() const {
 }
 
 std::string Function::nextValueName(const std::string &hint) {
-  return hint + std::to_string(valueId_++);
+  std::string base = hint.empty() ? "tmp" : hint;
+  const std::size_t kMaxLen = 30;
+  if (base.size() > kMaxLen) {
+    base = base.substr(0, kMaxLen);
+  }
+  return base + std::to_string(valueId_++);
 }
 
 std::string Function::nextBlockLabel(const std::string &hint) {

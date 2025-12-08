@@ -76,6 +76,10 @@ private:
   std::size_t totalSize(const std::vector<int> &dims) const;
 
   ConstValueList flattenConstInit(SysYParser::ConstInitValContext *ctx);
+  ConstValueList materializeConstInit(SysYParser::ConstInitValContext *ctx,
+                                      const std::vector<int> &dims);
+  ConstValueList materializeInit(SysYParser::InitValContext *ctx,
+                                 const std::vector<int> &dims);
   void normalizeInitializer(ConstValueList &values, std::size_t total);
 
   std::shared_ptr<ir::Constant>
