@@ -1,3 +1,4 @@
+// 基本块声明：保存指令序列
 #pragma once
 
 #include <memory>

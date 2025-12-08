@@ -1,3 +1,4 @@
+// IR 类型系统声明
 #pragma once
 
 #include <cstddef>

@@ -9,6 +9,7 @@
 
 namespace compiler {
 
+// 符号信息：记录地址、类型与属性
 struct Symbol {
   ir::Value *address = nullptr;
   ir::TypePtr valueType;
@@ -17,7 +18,7 @@ struct Symbol {
   bool isFunction = false;
   bool isPointerParam = false;
   std::vector<int> dimensions;
-  std::vector<int> constData; // Flattened initializers for const objects
+  std::vector<int> constData; // 展平后的常量初始值
   ir::Function *function = nullptr;
 };
 

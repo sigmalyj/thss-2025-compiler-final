@@ -1,3 +1,4 @@
+// IR 值基类声明
 #pragma once
 
 #include "ir/Type.h"

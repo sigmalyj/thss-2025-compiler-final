@@ -1,3 +1,4 @@
+// 全局变量节点的打印实现
 #include "ir/GlobalVariable.h"
 
 #include <sstream>

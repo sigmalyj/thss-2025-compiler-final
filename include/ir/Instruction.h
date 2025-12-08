@@ -1,3 +1,4 @@
+// IR 指令类型声明
 #pragma once
 
 #include "ir/Type.h"
@@ -11,7 +12,7 @@ namespace ir {
 
 class BasicBlock;
 
-enum class BinaryOp { Add, Sub, Mul, SDiv, SRem, And, Or, Xor }; // Xor rarely used but kept
+enum class BinaryOp { Add, Sub, Mul, SDiv, SRem, And, Or, Xor }; // 少用的异或依然保留
 
 enum class CmpOp { EQ, NE, LT, LE, GT, GE };
 

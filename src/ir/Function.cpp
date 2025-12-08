@@ -1,3 +1,4 @@
+// 函数对象：管理参数、基本块与符号打印
 #include "ir/Function.h"
 
 #include <sstream>
@@ -31,8 +32,7 @@ const std::vector<std::unique_ptr<Argument>> &Function::getArguments() const {
 }
 
 BasicBlock *Function::createBasicBlock(const std::string &label) {
-  // Always make block labels unique to avoid IR with duplicate labels when
-  // nested control-flow constructs reuse the same textual hint (e.g. "if.then").
+  // 基本块标签追加序号，避免重复命名
   std::string hint = label.empty() ? "bb" : label;
   std::string finalLabel = hint + std::to_string(blockId_++);
   auto block = std::make_unique<BasicBlock>(this, finalLabel);

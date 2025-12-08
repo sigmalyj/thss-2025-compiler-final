@@ -1,3 +1,4 @@
+// SysY 抽象语法树到自定义 IR 的生成器声明
 #pragma once
 
 #include "SysYParser.h"

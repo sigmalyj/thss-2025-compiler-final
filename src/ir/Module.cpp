@@ -1,3 +1,4 @@
+// 模块容器：维护全局变量与函数表
 #include "ir/Module.h"
 
 #include <sstream>

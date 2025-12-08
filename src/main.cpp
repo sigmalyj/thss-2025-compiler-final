@@ -1,3 +1,4 @@
+// 编译入口：解析 SysY 源文件并输出 IR 文本
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -32,7 +33,7 @@ int main(int argc, const char *argv[]) {
   CommonTokenStream tokens(&lexer);
   SysYParser parser(&tokens);
 
-  // Add error listener to report syntax errors
+  // 使用控制台错误监听器输出语法错误
   parser.removeErrorListeners();
   parser.addErrorListener(&ConsoleErrorListener::INSTANCE);
 

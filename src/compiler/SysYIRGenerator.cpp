@@ -1,3 +1,4 @@
+// SysY 语法树到自定义 IR 的生成实现
 #include "compiler/SysYIRGenerator.h"
 
 #include "SysYParserBaseVisitor.h"
@@ -372,11 +373,9 @@ void SysYIRGenerator::emitStmt(SysYParser::StmtContext *ctx) {
   } else if (ctx->exp()) {
     evaluateExp(ctx->exp());
   } else {
-    // Empty statement
+    // 空语句无需生成指令
   }
 }
-
-// ... (Remaining member function implementations will follow here)
 
 void SysYIRGenerator::emitCondition(SysYParser::CondContext *ctx,
                                     ir::BasicBlock *trueBlock,
@@ -610,7 +609,7 @@ ir::Value *SysYIRGenerator::getLValAddress(SysYParser::LValContext *ctx) {
   }
 
   if (symbol->isPointerParam) {
-    if (indices.empty()) return currentPtr; // already a pointer to element type
+    if (indices.empty()) return currentPtr; // 形参已是元素指针
     std::vector<ir::Value *> args;
     for (auto *idx : indices) args.push_back(idx);
     auto ptrElemType = std::dynamic_pointer_cast<ir::PointerType>(currentPtr->getType())->getElementType();
@@ -626,22 +625,20 @@ ir::Value *SysYIRGenerator::getLValAddress(SysYParser::LValContext *ctx) {
 }
 
 ir::Value *SysYIRGenerator::evaluateForArgument(SysYParser::ExpContext *ctx, ir::TypePtr expectedType) {
-  // Support array-to-pointer decay when the callee expects a pointer type.
+  // 被调方需要指针时，对数组实参与指针形参做退化处理
   if (expectedType && expectedType->isPointer()) {
     if (auto *lvalCtx = tryExtractLVal(ctx)) {
       auto *addr = getLValAddress(lvalCtx);
       auto addrType = std::dynamic_pointer_cast<ir::PointerType>(addr->getType());
       auto elemType = addrType->getElementType();
 
-      // If we have an array lvalue and the callee expects a pointer, decay to
-      // the first element pointer (GEP 0,0,...)
+      // 数组值衰变为首元素指针（GEP 0,0,...）
       if (elemType->isArray()) {
         std::vector<ir::Value *> decayIdx = {builder_.getInt32(0).get(), builder_.getInt32(0).get()};
         return builder_.createGEP(elemType, addr, decayIdx);
       }
 
-      // If the lvalue already matches (pointer parameter), just use the
-      // computed address.
+      // 非数组但本身是指针的实参，直接使用地址
       return addr;
     }
   }
@@ -722,20 +719,11 @@ int SysYIRGenerator::evalConstLVal(SysYParser::LValContext *ctx) {
     indices.push_back(evalAddExp(exp->addExp()));
   }
   
-  // Calculate linear index
+    // 将多维下标按行主序折算成线性下标
   std::size_t linearIndex = 0;
   std::size_t stride = 1;
-  // Row-major: index = i * dim1 * dim2 + j * dim2 + k
-  // But we have dims [d0, d1, d2].
-  // idx0 * (d1*d2) + idx1 * (d2) + idx2.
-  
-  // We need strides.
-  // strides[i] = product(dims[i+1]...dims[n-1])
-  
   if (indices.size() != symbol->dimensions.size()) {
-     // Partial indexing not allowed in const eval usually?
-     // Or maybe it is if it refers to an array? But evalConstLVal returns int.
-     // So it must be full indexing.
+      // 常量表达式中必须给出完整下标
      throw std::runtime_error("partial indexing in constant expression");
   }
   
@@ -937,19 +925,10 @@ void SysYIRGenerator::storeLinearElement(ir::Value *basePtr, const std::vector<i
     indices.push_back(builder_.getInt32(c).get());
   }
   
-  // basePtr is [d0 x [d1 x ...]]*
-  // GEP 0, c0, c1...
-  
-  // We need to construct the GEP.
-  // We need the type of basePtr.
+  // 按计算出的坐标生成指向元素的 GEP
   auto ptrType = std::dynamic_pointer_cast<ir::PointerType>(basePtr->getType());
   auto elemType = ptrType->getElementType();
-  
-  // We need to peel types as we go?
-  // createGEP handles it if we pass all indices.
-  // But we need the final element type?
-  // createGEP takes the type of the POINTER's element.
-  
+
   auto *gep = builder_.createGEP(elemType, basePtr, indices);
   builder_.createStore(value, gep);
 }

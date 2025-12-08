@@ -1,5 +1,7 @@
 #include "compiler/SymbolTable.h"
 
+// 简易作用域符号表，支持嵌套查找与插入
+
 namespace compiler {
 
 SymbolTable::SymbolTable() { enterScope(); }

@@ -1,3 +1,4 @@
+// 构建 IR 指令的便捷接口
 #pragma once
 
 #include "ir/Instruction.h"
@@ -23,8 +24,8 @@ public:
   BasicBlock *getInsertBlock() const { return insertBlock_; }
 
   AllocaInst *createAlloca(const TypePtr &type, const std::string &hint = "tmp");
-    AllocaInst *createAllocaAtEntry(const TypePtr &type,
-                                    const std::string &hint = "tmp");
+  AllocaInst *createAllocaAtEntry(const TypePtr &type,
+                                  const std::string &hint = "tmp");
   StoreInst *createStore(Value *value, Value *pointer);
   LoadInst *createLoad(const TypePtr &type, Value *pointer,
                        const std::string &hint = "tmp");

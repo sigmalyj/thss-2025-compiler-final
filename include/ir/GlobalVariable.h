@@ -1,3 +1,4 @@
+// 全局变量声明
 #pragma once
 
 #include "ir/Constant.h"

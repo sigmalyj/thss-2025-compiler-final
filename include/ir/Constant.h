@@ -1,3 +1,4 @@
+// 常量相关类型声明
 #pragma once
 
 #include "ir/Type.h"
