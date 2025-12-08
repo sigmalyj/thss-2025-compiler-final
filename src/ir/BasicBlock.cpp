@@ -17,6 +17,28 @@ Instruction *BasicBlock::appendInstruction(std::unique_ptr<Instruction> inst) {
   return raw;
 }
 
+Instruction *BasicBlock::insertBeforeTerminator(
+    std::unique_ptr<Instruction> inst) {
+  inst->setParent(this);
+  Instruction *raw = inst.get();
+
+  if (instructions_.empty()) {
+    instructions_.push_back(std::move(inst));
+    return raw;
+  }
+
+  auto *term = getTerminator();
+  if (!term) {
+    instructions_.push_back(std::move(inst));
+    return raw;
+  }
+
+  auto it = instructions_.end();
+  --it; // Point to terminator position.
+  instructions_.insert(it, std::move(inst));
+  return raw;
+}
+
 Instruction *BasicBlock::getTerminator() const {
   if (instructions_.empty()) {
     return nullptr;

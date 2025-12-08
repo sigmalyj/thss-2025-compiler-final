@@ -23,6 +23,8 @@ public:
   BasicBlock *getInsertBlock() const { return insertBlock_; }
 
   AllocaInst *createAlloca(const TypePtr &type, const std::string &hint = "tmp");
+    AllocaInst *createAllocaAtEntry(const TypePtr &type,
+                                    const std::string &hint = "tmp");
   StoreInst *createStore(Value *value, Value *pointer);
   LoadInst *createLoad(const TypePtr &type, Value *pointer,
                        const std::string &hint = "tmp");

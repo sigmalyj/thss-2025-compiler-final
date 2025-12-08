@@ -199,13 +199,14 @@ void SysYIRGenerator::handleConstDef(SysYParser::ConstDefContext *ctx) {
     symbol.address = global;
   } else {
     if (dims.empty()) {
-      auto *alloca = builder_.createAlloca(ir::Type::getInt32(), name + ".addr");
+      auto *alloca = builder_.createAllocaAtEntry(ir::Type::getInt32(),
+                      name + ".addr");
       auto *value = builder_.getInt32(values.empty() ? 0 : values[0]).get();
       builder_.createStore(value, alloca);
       symbol.address = alloca;
     } else {
       auto arrayType = buildArrayType(dims);
-      auto *alloca = builder_.createAlloca(arrayType, name + ".addr");
+      auto *alloca = builder_.createAllocaAtEntry(arrayType, name + ".addr");
       symbol.address = alloca;
       for (std::size_t i = 0; i < total; ++i) {
         auto *value = builder_.getInt32(symbol.constData[i]).get();
@@ -244,7 +245,8 @@ void SysYIRGenerator::handleVarDef(SysYParser::VarDefContext *ctx) {
     symbol.address = global;
   } else {
     if (dims.empty()) {
-      auto *alloca = builder_.createAlloca(ir::Type::getInt32(), name + ".addr");
+      auto *alloca = builder_.createAllocaAtEntry(ir::Type::getInt32(),
+                      name + ".addr");
       symbol.address = alloca;
       if (ctx->initVal()) {
         auto *value = ensureInteger(evaluateExp(ctx->initVal()->exp()));
@@ -254,7 +256,7 @@ void SysYIRGenerator::handleVarDef(SysYParser::VarDefContext *ctx) {
       }
     } else {
       auto arrayType = buildArrayType(dims);
-      auto *alloca = builder_.createAlloca(arrayType, name + ".addr");
+      auto *alloca = builder_.createAllocaAtEntry(arrayType, name + ".addr");
       symbol.address = alloca;
       if (ctx->initVal()) {
         emitArrayInitializer(alloca, dims, ctx->initVal());

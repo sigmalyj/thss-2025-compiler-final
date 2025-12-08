@@ -17,6 +17,7 @@ public:
   Function *getParent() const { return parent_; }
 
   Instruction *appendInstruction(std::unique_ptr<Instruction> inst);
+  Instruction *insertBeforeTerminator(std::unique_ptr<Instruction> inst);
   const std::vector<std::unique_ptr<Instruction>> &getInstructions() const {
     return instructions_;
   }

@@ -36,6 +36,34 @@ AllocaInst *IRBuilder::createAlloca(const TypePtr &type,
   return static_cast<AllocaInst *>(insertInstruction(std::move(inst), hint));
 }
 
+AllocaInst *IRBuilder::createAllocaAtEntry(const TypePtr &type,
+                                           const std::string &hint) {
+  if (!currentFunction_) {
+    throw std::runtime_error("Current function is not set");
+  }
+  const auto &blocks = currentFunction_->getBlocks();
+  if (blocks.empty()) {
+    throw std::runtime_error("Function has no basic blocks");
+  }
+
+  auto *originalBlock = insertBlock_;
+  auto *entry = blocks.front().get();
+  auto inst = std::make_unique<AllocaInst>(type);
+
+  inst->setName(currentFunction_->nextValueName(hint));
+  inst->setParent(entry);
+
+  Instruction *raw = nullptr;
+  if (entry->getTerminator()) {
+    raw = entry->insertBeforeTerminator(std::move(inst));
+  } else {
+    raw = entry->appendInstruction(std::move(inst));
+  }
+
+  insertBlock_ = originalBlock;
+  return static_cast<AllocaInst *>(raw);
+}
+
 StoreInst *IRBuilder::createStore(Value *value, Value *pointer) {
   auto inst = std::make_unique<StoreInst>(value, pointer);
   return static_cast<StoreInst *>(insertInstruction(std::move(inst), "store"));
