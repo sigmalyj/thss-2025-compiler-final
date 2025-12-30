@@ -461,7 +461,7 @@ ir::Value *SysYIRGenerator::evaluateAddExp(SysYParser::AddExpContext *ctx) {
     lhs = ensureInteger(lhs);
     rhs = ensureInteger(rhs);
     auto op = ctx->ADD() ? ir::BinaryOp::Add : ir::BinaryOp::Sub;
-    return builder_.createBinary(op, lhs, rhs);
+    return foldBinary(op, lhs, rhs);
   } else {
     return evaluateMulExp(ctx->mulExp());
   }
@@ -477,7 +477,7 @@ ir::Value *SysYIRGenerator::evaluateMulExp(SysYParser::MulExpContext *ctx) {
     if (ctx->MUL()) op = ir::BinaryOp::Mul;
     else if (ctx->DIV()) op = ir::BinaryOp::SDiv;
     else op = ir::BinaryOp::SRem;
-    return builder_.createBinary(op, lhs, rhs);
+    return foldBinary(op, lhs, rhs);
   } else {
     return evaluateUnaryExp(ctx->unaryExp());
   }
@@ -567,7 +567,7 @@ ir::Value *SysYIRGenerator::evaluateEqAsInt(SysYParser::EqExpContext *ctx) {
     lhs = ensureInteger(lhs);
     rhs = ensureInteger(rhs);
     auto op = ctx->EQ() ? ir::CmpOp::EQ : ir::CmpOp::NE;
-    auto *cmp = builder_.createICmp(op, lhs, rhs);
+    auto *cmp = foldCmp(op, lhs, rhs);
     return builder_.createZExt(cmp, ir::Type::getInt32());
   } else {
     return evaluateRelAsInt(ctx->relExp());
@@ -585,11 +585,87 @@ ir::Value *SysYIRGenerator::evaluateRelAsInt(SysYParser::RelExpContext *ctx) {
     else if (ctx->GT()) op = ir::CmpOp::GT;
     else if (ctx->LE()) op = ir::CmpOp::LE;
     else op = ir::CmpOp::GE;
-    auto *cmp = builder_.createICmp(op, lhs, rhs);
+    auto *cmp = foldCmp(op, lhs, rhs);
     return builder_.createZExt(cmp, ir::Type::getInt32());
   } else {
     return evaluateAddExp(ctx->addExp());
   }
+}
+
+std::optional<int> SysYIRGenerator::tryGetConstInt(ir::Value *value) {
+  if (auto *c = dynamic_cast<ir::ConstantInt *>(value)) {
+    return c->getValue();
+  }
+  return std::nullopt;
+}
+
+ir::Value *SysYIRGenerator::foldBinary(ir::BinaryOp op, ir::Value *lhs, ir::Value *rhs) {
+  auto l = tryGetConstInt(lhs);
+  auto r = tryGetConstInt(rhs);
+
+  if (l && r) {
+    int lv = *l;
+    int rv = *r;
+    switch (op) {
+    case ir::BinaryOp::Add: return builder_.getInt32(lv + rv).get();
+    case ir::BinaryOp::Sub: return builder_.getInt32(lv - rv).get();
+    case ir::BinaryOp::Mul: return builder_.getInt32(lv * rv).get();
+    case ir::BinaryOp::SDiv:
+      if (rv != 0) return builder_.getInt32(lv / rv).get();
+      break;
+    case ir::BinaryOp::SRem:
+      if (rv != 0) return builder_.getInt32(lv % rv).get();
+      break;
+    case ir::BinaryOp::And: return builder_.getInt32(lv & rv).get();
+    case ir::BinaryOp::Or: return builder_.getInt32(lv | rv).get();
+    case ir::BinaryOp::Xor: return builder_.getInt32(lv ^ rv).get();
+    }
+  }
+
+  if (r) {
+    int rv = *r;
+    switch (op) {
+    case ir::BinaryOp::Add:
+      if (rv == 0) return lhs;
+      break;
+    case ir::BinaryOp::Sub:
+      if (rv == 0) return lhs;
+      break;
+    case ir::BinaryOp::Mul:
+      if (rv == 1) return lhs;
+      if (rv == 0) return builder_.getInt32(0).get();
+      break;
+    case ir::BinaryOp::SDiv:
+      if (rv == 1) return lhs;
+      break;
+    case ir::BinaryOp::SRem:
+      if (rv == 1) return builder_.getInt32(0).get();
+      break;
+    default:
+      break;
+    }
+  }
+
+  if (l) {
+    int lv = *l;
+    switch (op) {
+    case ir::BinaryOp::Add:
+      if (lv == 0) return rhs;
+      break;
+    case ir::BinaryOp::Mul:
+      if (lv == 1) return rhs;
+      if (lv == 0) return builder_.getInt32(0).get();
+      break;
+    default:
+      break;
+    }
+  }
+
+  return builder_.createBinary(op, lhs, rhs);
+}
+
+ir::Value *SysYIRGenerator::foldCmp(ir::CmpOp op, ir::Value *lhs, ir::Value *rhs) {
+  return builder_.createICmp(op, lhs, rhs);
 }
 
 ir::Value *SysYIRGenerator::getLValAddress(SysYParser::LValContext *ctx) {

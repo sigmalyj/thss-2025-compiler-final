@@ -62,6 +62,11 @@ private:
   ir::Value *evaluateForArgument(SysYParser::ExpContext *ctx,
                                  ir::TypePtr expectedType);
 
+  // 简单窥孔：尝试常量折叠与代数化简
+  std::optional<int> tryGetConstInt(ir::Value *value);
+  ir::Value *foldBinary(ir::BinaryOp op, ir::Value *lhs, ir::Value *rhs);
+  ir::Value *foldCmp(ir::CmpOp op, ir::Value *lhs, ir::Value *rhs);
+
   ir::Value *ensureBoolean(ir::Value *value);
   ir::Value *ensureInteger(ir::Value *value);
 
