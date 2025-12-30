@@ -162,6 +162,8 @@ public:
   bool isConditional() const { return condition_ != nullptr; }
   Value *getCondition() const { return condition_; }
   void setCondition(Value *cond) { condition_ = cond; }
+  BasicBlock *getTrueBlock() const { return trueBlock_; }
+  BasicBlock *getFalseBlock() const { return falseBlock_; }
   std::string toIR() const override;
 
 private:

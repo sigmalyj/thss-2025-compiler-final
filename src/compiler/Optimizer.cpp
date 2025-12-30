@@ -5,6 +5,7 @@
 #include "ir/Instruction.h"
 #include "ir/Constant.h"
 
+#include <algorithm>
 #include <memory>
 #include <unordered_map>
 #include <unordered_set>
@@ -15,6 +16,12 @@ namespace {
 
 using ConstMap = std::unordered_map<ir::Value *, std::shared_ptr<ir::ConstantInt>>;
 using UseCount = std::unordered_map<ir::Value *, int>;
+using LiveSet = std::unordered_set<ir::Value *>;
+
+struct BlockUseDef {
+  LiveSet use;
+  LiveSet def;
+};
 
 bool isConstInt(ir::Value *v, int &out) {
   if (auto *c = dynamic_cast<ir::ConstantInt *>(v)) {
@@ -98,6 +105,111 @@ bool isSideEffectFree(const ir::Instruction *inst) {
   default:
     return false;
   }
+}
+
+std::vector<ir::BasicBlock *> getSuccessors(ir::BasicBlock *block) {
+  std::vector<ir::BasicBlock *> succs;
+  auto *term = block->getTerminator();
+  if (!term || term->getInstructionKind() != ir::InstructionKind::Br) {
+    return succs;
+  }
+  auto *br = static_cast<ir::BranchInst *>(term);
+  succs.push_back(br->getTrueBlock());
+  if (br->isConditional()) {
+    succs.push_back(br->getFalseBlock());
+  }
+  return succs;
+}
+
+std::unordered_map<ir::BasicBlock *, BlockUseDef>
+computeUseDef(ir::Function *func) {
+  std::unordered_map<ir::BasicBlock *, BlockUseDef> info;
+  for (const auto &blockPtr : func->getBlocks()) {
+    auto *bb = blockPtr.get();
+    BlockUseDef ud;
+    for (const auto &instPtr : bb->getInstructions()) {
+      auto *inst = instPtr.get();
+      for (auto *op : collectOperands(inst)) {
+        if (!ud.def.count(op)) {
+          ud.use.insert(op);
+        }
+      }
+      if (inst->hasResult()) {
+        ud.def.insert(inst);
+      }
+    }
+    info.emplace(bb, std::move(ud));
+  }
+  return info;
+}
+
+void computeLiveness(ir::Function *func,
+                     const std::unordered_map<ir::BasicBlock *, BlockUseDef> &ud,
+                     std::unordered_map<ir::BasicBlock *, LiveSet> &in,
+                     std::unordered_map<ir::BasicBlock *, LiveSet> &out) {
+  bool changed = true;
+  while (changed) {
+    changed = false;
+    for (auto bit = func->getBlocks().rbegin(); bit != func->getBlocks().rend(); ++bit) {
+      auto *bb = bit->get();
+      LiveSet newOut;
+      for (auto *succ : getSuccessors(bb)) {
+        auto it = in.find(succ);
+        if (it != in.end()) {
+          newOut.insert(it->second.begin(), it->second.end());
+        }
+      }
+
+      LiveSet newIn = ud.at(bb).use;
+      for (auto *v : newOut) {
+        if (!ud.at(bb).def.count(v)) {
+          newIn.insert(v);
+        }
+      }
+
+      if (newOut != out[bb] || newIn != in[bb]) {
+        out[bb] = std::move(newOut);
+        in[bb] = std::move(newIn);
+        changed = true;
+      }
+    }
+  }
+}
+
+bool livenessBasedDCE(ir::Function *func) {
+  auto ud = computeUseDef(func);
+  std::unordered_map<ir::BasicBlock *, LiveSet> in, out;
+  computeLiveness(func, ud, in, out);
+
+  bool changed = false;
+  for (const auto &blockPtr : func->getBlocks()) {
+    auto *bb = blockPtr.get();
+    LiveSet live = out[bb];
+    std::vector<std::unique_ptr<ir::Instruction>> kept;
+    kept.reserve(bb->instructions().size());
+
+    for (auto it = bb->instructions().rbegin(); it != bb->instructions().rend(); ++it) {
+      auto *inst = it->get();
+      bool removable = inst->hasResult() && isSideEffectFree(inst) && !live.count(inst);
+      if (removable) {
+        changed = true;
+        continue;
+      }
+
+      if (inst->hasResult()) {
+        live.erase(inst);
+      }
+      for (auto *op : collectOperands(inst)) {
+        live.insert(op);
+      }
+      kept.push_back(std::move(*it));
+    }
+
+    std::reverse(kept.begin(), kept.end());
+    bb->instructions().swap(kept);
+  }
+
+  return changed;
 }
 
 void forwardConstPropagation(ir::Function *func) {
@@ -256,7 +368,14 @@ void deadCodeElimination(ir::Function *func) {
 
 void optimizeFunction(ir::Function *func) {
   forwardConstPropagation(func);
-  deadCodeElimination(func);
+  bool changed = true;
+  while (changed) {
+    changed = false;
+    deadCodeElimination(func);
+    if (livenessBasedDCE(func)) {
+      changed = true;
+    }
+  }
 }
 
 } // namespace
