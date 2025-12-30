@@ -2,6 +2,7 @@
 #include <iostream>
 #include <fstream>
 #include <string>
+#include <cstdlib>
 
 #include "antlr4-runtime.h"
 #include "SysYLexer.h"
@@ -49,9 +50,13 @@ int main(int argc, const char *argv[]) {
   ir::IRBuilder builder;
   compiler::SysYIRGenerator generator(module, builder);
 
+  bool enableOpt = (std::getenv("SYSY_NO_OPT") == nullptr);
+
   try {
     generator.generate(tree);
-    compiler::runOptimizations(module);
+    if (enableOpt) {
+      compiler::runOptimizations(module);
+    }
   } catch (const std::exception &e) {
     std::cerr << "Error during IR generation: " << e.what() << std::endl;
     return 1;
