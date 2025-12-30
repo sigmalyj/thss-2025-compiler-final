@@ -66,6 +66,8 @@ class StoreInst : public Instruction {
 public:
   StoreInst(Value *value, Value *pointer);
 
+  Value *getValue() const { return value_; }
+  Value *getPointer() const { return pointer_; }
   std::string toIR() const override;
 
 private:
@@ -88,6 +90,13 @@ class BinaryInst : public Instruction {
 public:
   BinaryInst(BinaryOp op, Value *lhs, Value *rhs);
 
+  Value *getLHS() const { return lhs_; }
+  Value *getRHS() const { return rhs_; }
+  BinaryOp getOp() const { return op_; }
+  void setOperands(Value *lhs, Value *rhs) {
+    lhs_ = lhs;
+    rhs_ = rhs;
+  }
   std::string toIR() const override;
 
 private:
@@ -102,6 +111,13 @@ class ICmpInst : public Instruction {
 public:
   ICmpInst(CmpOp predicate, Value *lhs, Value *rhs);
 
+  Value *getLHS() const { return lhs_; }
+  Value *getRHS() const { return rhs_; }
+  CmpOp getPredicate() const { return predicate_; }
+  void setOperands(Value *lhs, Value *rhs) {
+    lhs_ = lhs;
+    rhs_ = rhs;
+  }
   std::string toIR() const override;
 
 private:
@@ -116,6 +132,8 @@ class CallInst : public Instruction {
 public:
   CallInst(FunctionTypePtr funcType, Value *callee, std::vector<Value *> args);
 
+  const std::vector<Value *> &getArgs() const { return args_; }
+  Value *getCallee() const { return callee_; }
   std::string toIR() const override;
 
 private:
@@ -128,6 +146,8 @@ class ReturnInst : public Instruction {
 public:
   explicit ReturnInst(Value *value = nullptr);
 
+  Value *getValue() const { return value_; }
+  void setValue(Value *value) { value_ = value; }
   std::string toIR() const override;
 
 private:
@@ -139,6 +159,9 @@ public:
   BranchInst(BasicBlock *target);
   BranchInst(Value *condition, BasicBlock *trueBlock, BasicBlock *falseBlock);
 
+  bool isConditional() const { return condition_ != nullptr; }
+  Value *getCondition() const { return condition_; }
+  void setCondition(Value *cond) { condition_ = cond; }
   std::string toIR() const override;
 
 private:
@@ -152,6 +175,10 @@ public:
   GetElementPtrInst(const TypePtr &elementType, Value *pointer,
                     std::vector<Value *> indices);
 
+  Value *getPointer() const { return pointer_; }
+  const std::vector<Value *> &getIndices() const { return indices_; }
+  void setPointer(Value *ptr) { pointer_ = ptr; }
+  void setIndex(std::size_t i, Value *v) { if (i < indices_.size()) indices_[i] = v; }
   std::string toIR() const override;
 
 private:
@@ -164,6 +191,8 @@ class ZExtInst : public Instruction {
 public:
   ZExtInst(Value *value, const TypePtr &destType);
 
+  Value *getValue() const { return value_; }
+  void setValue(Value *value) { value_ = value; }
   std::string toIR() const override;
 
 private:

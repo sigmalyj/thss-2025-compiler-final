@@ -22,6 +22,9 @@ public:
   const std::vector<std::unique_ptr<Instruction>> &getInstructions() const {
     return instructions_;
   }
+  std::vector<std::unique_ptr<Instruction>> &instructions() {
+    return instructions_;
+  }
 
   bool empty() const { return instructions_.empty(); }
   Instruction *getTerminator() const;

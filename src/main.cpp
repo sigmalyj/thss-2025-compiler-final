@@ -9,6 +9,7 @@
 #include "ir/Module.h"
 #include "ir/IRBuilder.h"
 #include "compiler/SysYIRGenerator.h"
+#include "compiler/Optimizer.h"
 
 using namespace antlr4;
 
@@ -50,6 +51,7 @@ int main(int argc, const char *argv[]) {
 
   try {
     generator.generate(tree);
+    compiler::runOptimizations(module);
   } catch (const std::exception &e) {
     std::cerr << "Error during IR generation: " << e.what() << std::endl;
     return 1;
