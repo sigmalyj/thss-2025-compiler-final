@@ -1,4 +1,4 @@
-# thss-2025-compiler-final
+# SysY-Compiler
 
 ![ANTLR4](https://img.shields.io/badge/ANTLR-4-blue?style=flat-square) ![C++](https://img.shields.io/badge/C++-17-blue?style=flat-square) ![CMake](https://img.shields.io/badge/CMake-3.22.1-blue?style=flat-square) ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
 
